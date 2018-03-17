@@ -10,6 +10,7 @@ from utils.tools import rel_error
 N, D, H = 3, 10, 4
 
 x = np.random.uniform(size=(N, D))
+x[1:, :] = np.nan
 prev_h = np.random.uniform(size=(N, H))
 
 rnn_cell = RNNCell(in_features=D, units=H)

@@ -42,6 +42,8 @@ class RNNCell(Layer):
         #############################################################
 
         # extract necessary parameters
+        nan_positions = np.isnan(inputs[0])
+        inputs[0][nan_positions] = 0
         outputs = np.tanh(np.dot(inputs[0], self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
         return outputs
 
@@ -57,8 +59,23 @@ class RNNCell(Layer):
         """
         #############################################################
         # code here
-        raise NotImplementedError
         #############################################################
+        inputs_mask = np.ones(inputs[0].shape)
+        nan_positions = np.isnan(inputs[0])
+        inputs[0][nan_positions] = 0
+        inputs_mask[nan_positions] = 0
+
+        outputs = np.tanh(np.dot(inputs[0], self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
+        enhanced_grads = np.multiply(in_grads, 1 - np.square(outputs))
+
+        self.b_grad = np.sum(enhanced_grads, axis=0)
+        self.kernel_grad = np.dot(np.transpose(inputs[0]), enhanced_grads)
+        self.r_kernel_grad = np.dot(np.transpose(inputs[1]), enhanced_grads)
+
+        out_grads = [
+            np.multiply(np.dot(enhanced_grads, self.kernel.transpose()), inputs_mask),
+            np.dot(enhanced_grads, self.recurrent_kernel.transpose())
+        ]
         return out_grads
 
     def update(self, params):

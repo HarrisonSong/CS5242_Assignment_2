@@ -39,8 +39,10 @@ class RNNCell(Layer):
         """
         #############################################################
         # code here
-        raise NotImplementedError
         #############################################################
+
+        # extract necessary parameters
+        outputs = np.tanh(np.dot(inputs[0], self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
         return outputs
 
     def backward(self, in_grads, inputs):

@@ -39,12 +39,12 @@ class RNNCell(Layer):
         """
         #############################################################
         # code here
+
+        inputs[0] = np.nan_to_num(inputs[0])
+        outputs = np.tanh(np.dot(inputs[0], self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
+
         #############################################################
 
-        # extract necessary parameters
-        nan_positions = np.isnan(inputs[0])
-        inputs[0][nan_positions] = 0
-        outputs = np.tanh(np.dot(inputs[0], self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
         return outputs
 
     def backward(self, in_grads, inputs):
@@ -59,7 +59,7 @@ class RNNCell(Layer):
         """
         #############################################################
         # code here
-        #############################################################
+
         inputs_mask = np.ones(inputs[0].shape)
         nan_positions = np.isnan(inputs[0])
         inputs[0][nan_positions] = 0
@@ -76,6 +76,9 @@ class RNNCell(Layer):
             np.multiply(np.dot(enhanced_grads, self.kernel.transpose()), inputs_mask),
             np.dot(enhanced_grads, self.recurrent_kernel.transpose())
         ]
+
+        #############################################################
+
         return out_grads
 
     def update(self, params):
@@ -156,7 +159,17 @@ class RNN(Layer):
         """
         #############################################################
         # code here
-        raise NotImplementedError
+
+        inputs = np.nan_to_num(inputs)
+        time_steps = inputs.shape[1]
+        units = self.h0.shape[1]
+        outputs = np.zeros((inputs.shape[0], time_steps, units))
+        for t in range(time_steps):
+            if t is 0:
+                outputs[:, t, :] = self.cell.forward([inputs[:, t, :], self.h0])
+            else:
+                outputs[:, t, :] = self.cell.forward([inputs[:, t, :], outputs[:, t - 1, :]])
+
         #############################################################
         return outputs
 

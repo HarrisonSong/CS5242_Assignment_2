@@ -7,6 +7,7 @@ import copy
 This file defines layer types that are commonly used for recurrent neural networks.
 """
 
+
 class RNNCell(Layer):
     def __init__(self, in_features, units, name='rnn_cell', initializer=Guassian()):
         """Initialization
@@ -31,7 +32,7 @@ class RNNCell(Layer):
         """Forward pass
 
         # Arguments
-            inputs: [input numpy array with shape (batch, in_features), 
+            inputs: [input numpy array with shape (batch, in_features),
                     state numpy array with shape (batch, units)]
 
         # Returns
@@ -54,7 +55,7 @@ class RNNCell(Layer):
             inputs: numpy array with shape (batch, in_features), same with forward inputs
 
         # Returns
-            out_grads: [gradients to input numpy array with shape (batch, in_features), 
+            out_grads: [gradients to input numpy array with shape (batch, in_features),
                         gradients to state numpy array with shape (batch, units)]
         """
         #############################################################
@@ -65,7 +66,7 @@ class RNNCell(Layer):
         inputs[0][nan_positions] = 0
         inputs_mask[nan_positions] = 0
 
-        outputs = np.tanh(np.dot(inputs[0], self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
+        outputs = self.forward(inputs)
         enhanced_grads = np.multiply(in_grads, 1 - np.square(outputs))
 
         self.b_grad = np.sum(enhanced_grads, axis=0)
@@ -84,17 +85,17 @@ class RNNCell(Layer):
     def update(self, params):
         """Update parameters with new params
         """
-        for k,v in params.items():
+        for k, v in params.items():
             if '/kernel' in k:
                 self.kernel = v
             elif '/recurrent_kernel' in k:
                 self.recurrent_kernel = v
             elif '/bias' in k:
                 self.bias = v
-        
+
     def get_params(self, prefix):
         """Return parameters and gradients
-        
+
         # Arguments
             prefix: string, to contruct prefix of keys in the dictionary (usually is the layer-ith)
 
@@ -106,14 +107,14 @@ class RNNCell(Layer):
         """
         if self.trainable:
             params = {
-                prefix+':'+self.name+'/kernel': self.kernel,
-                prefix+':'+self.name+'/recurrent_kernel': self.recurrent_kernel,
-                prefix+':'+self.name+'/bias': self.bias
+                prefix + ':' + self.name + '/kernel': self.kernel,
+                prefix + ':' + self.name + '/recurrent_kernel': self.recurrent_kernel,
+                prefix + ':' + self.name + '/bias': self.bias
             }
             grads = {
-                prefix+':'+self.name+'/kernel': self.kernel_grad,
-                prefix+':'+self.name+'/recurrent_kernel': self.r_kernel_grad,
-                prefix+':'+self.name+'/bias': self.b_grad
+                prefix + ':' + self.name + '/kernel': self.kernel_grad,
+                prefix + ':' + self.name + '/recurrent_kernel': self.r_kernel_grad,
+                prefix + ':' + self.name + '/bias': self.b_grad
             }
             return params, grads
         else:
@@ -135,7 +136,7 @@ class RNN(Layer):
             self.h0 = np.zeros_like(self.cell.bias)
         else:
             self.h0 = h0
-        
+
         self.kernel = self.cell.kernel
         self.recurrent_kernel = self.cell.recurrent_kernel
         self.bias = self.cell.bias
@@ -152,7 +153,7 @@ class RNN(Layer):
         the RNN forward, we return the hidden states for all timesteps.
 
         # Arguments
-            inputs: input numpy array with shape (batch(N), time_steps(T), in_features(D)), 
+            inputs: input numpy array with shape (batch(N), time_steps(T), in_features(D)),
 
         # Returns
             outputs: numpy array with shape (batch(N), time_steps(T), units(H))
@@ -162,6 +163,8 @@ class RNN(Layer):
 
         inputs = np.nan_to_num(inputs)
         time_steps = inputs.shape[1]
+        if len(self.h0.shape) is 1:
+            self.h0 = np.zeros((inputs.shape[0], self.h0.shape[0]))
         units = self.h0.shape[1]
         outputs = np.zeros((inputs.shape[0], time_steps, units))
         for t in range(time_steps):
@@ -184,24 +187,42 @@ class RNN(Layer):
         """
         #############################################################
         # code here
-        raise NotImplementedError
+
+        hidden_states = self.forward(inputs)
+        inputs = np.nan_to_num(inputs)
+        time_steps = inputs.shape[1]
+        out_grads = np.zeros((inputs.shape[0], time_steps, inputs.shape[2]))
+        hidden_grads = np.zeros((inputs.shape[0], in_grads.shape[2]))
+
+        for t in reversed(range(time_steps)):
+            in_grads[:, t, :] += hidden_grads
+            if t is 0:
+                output = self.cell.backward(in_grads[:, t, :], [inputs[:, t, :], self.h0])
+            else:
+                output = self.cell.backward(in_grads[:, t, :], [inputs[:, t, :], hidden_states[:, t - 1, :]])
+            out_grads[:, t, :] = output[0]
+            hidden_grads = output[1]
+            self.kernel_grad += self.cell.kernel_grad
+            self.r_kernel_grad += self.cell.r_kernel_grad
+            self.b_grad += self.cell.b_grad
+
         #############################################################
         return out_grads
 
     def update(self, params):
         """Update parameters with new params
         """
-        for k,v in params.items():
+        for k, v in params.items():
             if '/kernel' in k:
                 self.kernel = v
             elif '/recurrent_kernel' in k:
                 self.recurrent_kernel = v
             elif '/bias' in k:
                 self.bias = v
-        
+
     def get_params(self, prefix):
         """Return parameters and gradients
-        
+
         # Arguments
             prefix: string, to contruct prefix of keys in the dictionary (usually is the layer-ith)
 
@@ -213,23 +234,24 @@ class RNN(Layer):
         """
         if self.trainable:
             params = {
-                prefix+':'+self.name+'/kernel': self.kernel,
-                prefix+':'+self.name+'/recurrent_kernel': self.recurrent_kernel,
-                prefix+':'+self.name+'/bias': self.bias
+                prefix + ':' + self.name + '/kernel': self.kernel,
+                prefix + ':' + self.name + '/recurrent_kernel': self.recurrent_kernel,
+                prefix + ':' + self.name + '/bias': self.bias
             }
             grads = {
-                prefix+':'+self.name+'/kernel': self.kernel_grad,
-                prefix+':'+self.name+'/recurrent_kernel': self.r_kernel_grad,
-                prefix+':'+self.name+'/bias': self.b_grad
+                prefix + ':' + self.name + '/kernel': self.kernel_grad,
+                prefix + ':' + self.name + '/recurrent_kernel': self.r_kernel_grad,
+                prefix + ':' + self.name + '/bias': self.b_grad
             }
             return params, grads
         else:
-            return None        
+            return None
 
 
 class BidirectionalRNN(Layer):
-    """ Concatenating Bi-directional RNN 
+    """ Concatenating Bi-directional RNN
     """
+
     def __init__(self, cell, h0=None, hr=None, name='brnn'):
         """Initialize two inner RNNs for forward and backward processes, respectively
 
@@ -262,17 +284,17 @@ class BidirectionalRNN(Layer):
         num_nan = np.sum(~mask, axis=1)
         reversed_x = np.array(x[:, ::-1, :])
         for i in range(num_nan.size):
-            reversed_x[i] = np.roll(reversed_x[i], x.shape[1]-num_nan[i], axis=0)
+            reversed_x[i] = np.roll(reversed_x[i], x.shape[1] - num_nan[i], axis=0)
         return reversed_x
 
     def forward(self, inputs):
         """
-        Forward pass for concatenating hidden vectors obtained from a RNN 
+        Forward pass for concatenating hidden vectors obtained from a RNN
         trained on normal sentences and a RNN trained on reversed sentences.
         Outputs concatenate the two produced sequences.
 
         # Arguments
-            inputs: input numpy array with shape (batch(N), time_steps(T), in_features(D)), 
+            inputs: input numpy array with shape (batch(N), time_steps(T), in_features(D)),
 
         # Returns
             outputs: numpy array with shape (batch(N), time_steps(T), units(H)*2)
@@ -301,7 +323,7 @@ class BidirectionalRNN(Layer):
     def update(self, params):
         """Update parameters with new params
         """
-        for k,v in params.items():
+        for k, v in params.items():
             if '/forward_kernel' in k:
                 self.forward_rnn.kernel = v
             elif '/forward_recurrent_kernel' in k:
@@ -314,10 +336,10 @@ class BidirectionalRNN(Layer):
                 self.backward_rnn.recurrent_kernel = v
             elif '/backward_bias' in k:
                 self.backward_rnn.bias = v
-        
+
     def get_params(self, prefix):
         """Return parameters and gradients
-        
+
         # Arguments
             prefix: string, to contruct prefix of keys in the dictionary (usually is the layer-ith)
 
@@ -329,20 +351,20 @@ class BidirectionalRNN(Layer):
         """
         if self.trainable:
             params = {
-                prefix+':'+self.name+'/forward_kernel': self.forward_rnn.kernel,
-                prefix+':'+self.name+'/forward_recurrent_kernel': self.forward_rnn.recurrent_kernel,
-                prefix+':'+self.name+'/forward_bias': self.forward_rnn.bias,
-                prefix+':'+self.name+'/backward_kernel': self.backward_rnn.kernel,
-                prefix+':'+self.name+'/backward_recurrent_kernel': self.backward_rnn.recurrent_kernel,
-                prefix+':'+self.name+'/backward_bias': self.backward_rnn.bias
+                prefix + ':' + self.name + '/forward_kernel': self.forward_rnn.kernel,
+                prefix + ':' + self.name + '/forward_recurrent_kernel': self.forward_rnn.recurrent_kernel,
+                prefix + ':' + self.name + '/forward_bias': self.forward_rnn.bias,
+                prefix + ':' + self.name + '/backward_kernel': self.backward_rnn.kernel,
+                prefix + ':' + self.name + '/backward_recurrent_kernel': self.backward_rnn.recurrent_kernel,
+                prefix + ':' + self.name + '/backward_bias': self.backward_rnn.bias
             }
             grads = {
-                prefix+':'+self.name+'/forward_kernel': self.forward_rnn.kernel_grad,
-                prefix+':'+self.name+'/forward_recurrent_kernel': self.forward_rnn.r_kernel_grad,
-                prefix+':'+self.name+'/forward_bias': self.forward_rnn.b_grad,
-                prefix+':'+self.name+'/backward_kernel': self.backward_rnn.kernel_grad,
-                prefix+':'+self.name+'/backward_recurrent_kernel': self.backward_rnn.r_kernel_grad,
-                prefix+':'+self.name+'/backward_bias': self.backward_rnn.b_grad
+                prefix + ':' + self.name + '/forward_kernel': self.forward_rnn.kernel_grad,
+                prefix + ':' + self.name + '/forward_recurrent_kernel': self.forward_rnn.r_kernel_grad,
+                prefix + ':' + self.name + '/forward_bias': self.forward_rnn.b_grad,
+                prefix + ':' + self.name + '/backward_kernel': self.backward_rnn.kernel_grad,
+                prefix + ':' + self.name + '/backward_recurrent_kernel': self.backward_rnn.r_kernel_grad,
+                prefix + ':' + self.name + '/backward_bias': self.backward_rnn.b_grad
             }
             return params, grads
         else:

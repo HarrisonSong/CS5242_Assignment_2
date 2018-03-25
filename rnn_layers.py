@@ -41,7 +41,8 @@ class RNNCell(Layer):
         #############################################################
         # code here
 
-        inputs[0] = np.nan_to_num(inputs[0])
+        nan_positions = np.isnan(inputs[0])
+        inputs[0][nan_positions] = 0
         outputs = np.tanh(np.dot(inputs[0], self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
 
         #############################################################
@@ -160,19 +161,19 @@ class RNN(Layer):
         """
         #############################################################
         # code here
+        nan_positions = np.isnan(inputs)
+        inputs[nan_positions] = 0
 
-        inputs = np.nan_to_num(inputs)
+        batch_size = inputs.shape[0]
         time_steps = inputs.shape[1]
-        if len(self.h0.shape) is 1:
-            self.h0 = np.zeros((inputs.shape[0], self.h0.shape[0]))
-        units = self.h0.shape[1]
+        units = self.h0.shape[0]
+        self.h0 = np.tile(self.h0, (batch_size, 1))
         outputs = np.zeros((inputs.shape[0], time_steps, units))
         for t in range(time_steps):
             if t is 0:
                 outputs[:, t, :] = self.cell.forward([inputs[:, t, :], self.h0])
             else:
                 outputs[:, t, :] = self.cell.forward([inputs[:, t, :], outputs[:, t - 1, :]])
-
         #############################################################
         return outputs
 

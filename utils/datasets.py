@@ -13,8 +13,8 @@ class Sentiment():
         self._load_data(os.path.join(data_rpath, 'corpus.csv'))
         # build dictionary from data
         dictionary_path = os.path.join(data_rpath, 'dictionary.csv')
-        if not os.path.exists(dictionary_path):
-            self._build_dictionary(np.concatenate([self.x_train, self.x_test, self.x_val]), dictionary_path)
+        # if not os.path.exists(dictionary_path):
+        self._build_dictionary(np.concatenate([self.x_train, self.x_test, self.x_val]), dictionary_path)
         self.dictionary = self._load_dictionary(dictionary_path)
 
     def _load_data(self, path, val_size=100, test_size=100):

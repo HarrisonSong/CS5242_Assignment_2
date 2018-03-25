@@ -166,9 +166,10 @@ class RNN(Layer):
 
         batch_size = inputs.shape[0]
         time_steps = inputs.shape[1]
-        units = self.h0.shape[0]
-        self.h0 = np.tile(self.h0, (batch_size, 1))
-        outputs = np.zeros((inputs.shape[0], time_steps, units))
+        if len(self.h0.shape) == 1:
+            self.h0 = np.tile(self.h0, (batch_size, 1))
+        units = self.h0.shape[1]
+        outputs = np.zeros((batch_size, time_steps, units))
         for t in range(time_steps):
             if t is 0:
                 outputs[:, t, :] = self.cell.forward([inputs[:, t, :], self.h0])
@@ -190,10 +191,15 @@ class RNN(Layer):
         # code here
 
         hidden_states = self.forward(inputs)
-        inputs = np.nan_to_num(inputs)
+        nan_positions = np.isnan(inputs)
+        inputs[nan_positions] = 0
+        inputs_mask = np.ones(inputs.shape)
+        inputs_mask[nan_positions] = 0
+
+        batch_size = inputs.shape[0]
         time_steps = inputs.shape[1]
-        out_grads = np.zeros((inputs.shape[0], time_steps, inputs.shape[2]))
-        hidden_grads = np.zeros((inputs.shape[0], in_grads.shape[2]))
+        out_grads = np.zeros((batch_size, time_steps, inputs.shape[2]))
+        hidden_grads = np.zeros((batch_size, in_grads.shape[2]))
 
         for t in reversed(range(time_steps)):
             in_grads[:, t, :] += hidden_grads

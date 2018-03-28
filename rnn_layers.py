@@ -42,8 +42,11 @@ class RNNCell(Layer):
         # code here
 
         nan_positions = np.isnan(inputs[0])
-        inputs[0][nan_positions] = 0
-        outputs = np.tanh(np.dot(inputs[0], self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
+        input_copy = inputs[0].copy()
+        input_copy[nan_positions] = 0
+        outputs_mask = np.dot(~nan_positions, self.kernel) == 0
+        outputs = np.tanh(np.dot(input_copy, self.kernel) + np.dot(inputs[1], self.recurrent_kernel) + self.bias)
+        outputs[outputs_mask] = np.nan
 
         #############################################################
 
@@ -62,21 +65,25 @@ class RNNCell(Layer):
         #############################################################
         # code here
 
-        inputs_mask = np.ones(inputs[0].shape)
-        nan_positions = np.isnan(inputs[0])
-        inputs[0][nan_positions] = 0
-        inputs_mask[nan_positions] = 0
+        input_mask = np.isnan(inputs[0])
+        input_copy = inputs[0].copy()
+        input_copy[input_mask] = 0
 
         outputs = self.forward(inputs)
-        enhanced_grads = np.multiply(in_grads, 1 - np.square(outputs))
+        hidden_mask = np.isnan(outputs)
+        outputs[hidden_mask] = 0
+        hidden_copy = inputs[1].copy()
+        hidden_copy[hidden_mask] = 0
 
-        self.b_grad = np.sum(enhanced_grads, axis=0)
-        self.kernel_grad = np.dot(np.transpose(inputs[0]), enhanced_grads)
-        self.r_kernel_grad = np.dot(np.transpose(inputs[1]), enhanced_grads)
+        enhanced_grads = in_grads * (1 - np.square(outputs))
+
+        self.b_grad = np.sum(enhanced_grads * ~hidden_mask, axis=0)
+        self.kernel_grad = np.dot(np.transpose(input_copy), enhanced_grads)
+        self.r_kernel_grad = np.dot(np.transpose(hidden_copy), enhanced_grads)
 
         out_grads = [
-            np.multiply(np.dot(enhanced_grads, self.kernel.transpose()), inputs_mask),
-            np.dot(enhanced_grads, self.recurrent_kernel.transpose())
+            np.dot(enhanced_grads, self.kernel.transpose()) * ~input_mask,
+            np.dot(enhanced_grads, self.recurrent_kernel.transpose()) * ~hidden_mask
         ]
 
         #############################################################
@@ -162,7 +169,8 @@ class RNN(Layer):
         #############################################################
         # code here
         nan_positions = np.isnan(inputs)
-        inputs[nan_positions] = 0
+        inputs_copy = inputs.copy()
+        inputs_copy[nan_positions] = 0
 
         batch_size = inputs.shape[0]
         time_steps = inputs.shape[1]
@@ -172,9 +180,12 @@ class RNN(Layer):
         outputs = np.zeros((batch_size, time_steps, units))
         for t in range(time_steps):
             if t is 0:
-                outputs[:, t, :] = self.cell.forward([inputs[:, t, :], self.h0])
+                outputs[:, t, :] = self.cell.forward([inputs_copy[:, t, :], self.h0])
             else:
-                outputs[:, t, :] = self.cell.forward([inputs[:, t, :], outputs[:, t - 1, :]])
+                outputs[:, t, :] = self.cell.forward([inputs_copy[:, t, :], outputs[:, t - 1, :]])
+            output_mask = np.dot(~nan_positions[:, t, :], self.kernel) == 0
+            outputs[:, t, :][output_mask] = np.nan
+
         #############################################################
         return outputs
 
@@ -189,26 +200,22 @@ class RNN(Layer):
         """
         #############################################################
         # code here
+        inputs_copy = inputs.copy()
+        in_grads_copy = in_grads.copy()
 
         hidden_states = self.forward(inputs)
-        nan_positions = np.isnan(inputs)
-        inputs[nan_positions] = 0
-        inputs_mask = np.ones(inputs.shape)
-        inputs_mask[nan_positions] = 0
 
         batch_size = inputs.shape[0]
         time_steps = inputs.shape[1]
         out_grads = np.zeros((batch_size, time_steps, inputs.shape[2]))
-        hidden_grads = np.zeros((batch_size, in_grads.shape[2]))
 
         for t in reversed(range(time_steps)):
-            in_grads[:, t, :] += hidden_grads
             if t is 0:
-                output = self.cell.backward(in_grads[:, t, :], [inputs[:, t, :], self.h0])
+                output = self.cell.backward(in_grads_copy[:, t, :], [inputs_copy[:, t, :], self.h0])
             else:
-                output = self.cell.backward(in_grads[:, t, :], [inputs[:, t, :], hidden_states[:, t - 1, :]])
+                output = self.cell.backward(in_grads_copy[:, t, :], [inputs_copy[:, t, :], hidden_states[:, t - 1, :]])
+                in_grads_copy[:, t - 1, :] += output[1]
             out_grads[:, t, :] = output[0]
-            hidden_grads = output[1]
             self.kernel_grad += self.cell.kernel_grad
             self.r_kernel_grad += self.cell.r_kernel_grad
             self.b_grad += self.cell.b_grad

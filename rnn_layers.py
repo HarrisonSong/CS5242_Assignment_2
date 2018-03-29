@@ -176,6 +176,8 @@ class RNN(Layer):
         time_steps = inputs.shape[1]
         if len(self.h0.shape) == 1:
             self.h0 = np.tile(self.h0, (batch_size, 1))
+        if self.h0.shape[0] != batch_size:
+            self.h0 = np.tile(self.h0[0], (batch_size, 1))
         units = self.h0.shape[1]
         outputs = np.zeros((batch_size, time_steps, units))
         for t in range(time_steps):

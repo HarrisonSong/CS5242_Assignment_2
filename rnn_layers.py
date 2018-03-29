@@ -330,7 +330,14 @@ class BidirectionalRNN(Layer):
         """
         #############################################################
         # code here
-        raise NotImplementedError
+        units = int(in_grads.shape[2]/2)
+        mask = ~np.any(np.isnan(inputs), axis=2)
+        forward_output_grads = self.forward_rnn.backward(in_grads[:, :, : units], inputs)
+        backward_output_grads = self.backward_rnn.backward(
+            self._reverse_temporal_data(in_grads[:, :, units:], mask),
+            self._reverse_temporal_data(inputs, mask)
+        )
+        out_grads = forward_output_grads + self._reverse_temporal_data(backward_output_grads, mask)
         #############################################################
         return out_grads
 
